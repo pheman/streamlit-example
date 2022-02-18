@@ -1,36 +1,49 @@
 import streamlit as st
-import pandas as pd
 import numpy as np
 
-st.title('Uber pickups in NYC')
+# Interactive Streamlit elements, like these sliders, return their value.
+# This gives you an extremely simple interaction model.
+iterations = st.sidebar.slider("Level of detail", 2, 20, 10, 1)
+separation = st.sidebar.slider("Separation", 0.7, 2.0, 0.7885)
 
-DATE_COLUMN = 'date/time'
-DATA_URL = ('https://s3-us-west-2.amazonaws.com/'
-            'streamlit-demo-data/uber-raw-data-sep14.csv.gz')
+# Non-interactive elements return a placeholder to their location
+# in the app. Here we're storing progress_bar to update it later.
+progress_bar = st.sidebar.progress(0)
 
-@st.cache
-def load_data(nrows):
-    data = pd.read_csv(DATA_URL, nrows=nrows)
-    lowercase = lambda x: str(x).lower()
-    data.rename(lowercase, axis='columns', inplace=True)
-    data[DATE_COLUMN] = pd.to_datetime(data[DATE_COLUMN])
-    return data
+# These two elements will be filled in later, so we create a placeholder
+# for them using st.empty()
+frame_text = st.sidebar.empty()
+image = st.empty()
 
-data_load_state = st.text('Loading data...')
-data = load_data(10000)
-data_load_state.text("Done! (using st.cache)")
+m, n, s = 960, 640, 400
+x = np.linspace(-m / s, m / s, num=m).reshape((1, m))
+y = np.linspace(-n / s, n / s, num=n).reshape((n, 1))
 
-if st.checkbox('Show raw data'):
-    st.subheader('Raw data')
-    st.write(data)
+for frame_num, a in enumerate(np.linspace(0.0, 4 * np.pi, 100)):
+    # Here were setting value for these two elements.
+    progress_bar.progress(frame_num)
+    frame_text.text("Frame %i/100" % (frame_num + 1))
 
-st.subheader('Number of pickups by hour')
-hist_values = np.histogram(data[DATE_COLUMN].dt.hour, bins=24, range=(0,24))[0]
-st.bar_chart(hist_values)
+    # Performing some fractal wizardry.
+    c = separation * np.exp(1j * a)
+    Z = np.tile(x, (n, 1)) + 1j * np.tile(y, (1, m))
+    C = np.full((n, m), c)
+    M: Any = np.full((n, m), True, dtype=bool)
+    N = np.zeros((n, m))
 
-# Some number in the range 0-23
-hour_to_filter = st.slider('hour', 0, 23, 17)
-filtered_data = data[data[DATE_COLUMN].dt.hour == hour_to_filter]
+    for i in range(iterations):
+        Z[M] = Z[M] * Z[M] + C[M]
+        M[np.abs(Z) > 2] = False
+        N[M] = i
 
-st.subheader('Map of all pickups at %s:00' % hour_to_filter)
-st.map(filtered_data)
+    # Update the image placeholder by calling the image() function on it.
+    image.image(1.0 - (N / N.max()), use_column_width=True)
+
+# We clear elements by calling empty on them.
+progress_bar.empty()
+frame_text.empty()
+
+# Streamlit widgets automatically run the script from top to bottom. Since
+# this button is not connected to any other logic, it just causes a plain
+# rerun.
+st.button("Re-run")
